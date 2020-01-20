@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Volume Rendering in WebGL</title>
+
+<!-- MAIN VERTEX SHADER -->
+<script id="vertex-shader" type="x-shader/x-vertex">
+attribute vec4 vPosition;
+
+uniform mat4 model2clip;
+uniform mat4 model2world;
+
+varying vec4 fPosition;
+varying vec3 worldSpaceCoords;
+
+void main()
+{
+    gl_Position = model2clip * vPosition;
+    fPosition = model2clip * vPosition;
+    worldSpaceCoords = (model2world * vPosition).xyz + vec3(0.5, 0.5, 0.5);
+}
+</script>
+
+<!-- MAIN FRAGMENT SHADER -->
+<script id="fragment-shader" type="x-shader/x-fragment">
+precision mediump float;
+
+uniform sampler2D backTex; //world coordinates of back faces
+uniform sampler2D cubeTex; //voxel_grid
+uniform int steps;
+uniform float alphaCorrection;
+
+const int MAX_STEPS = 256;
+
+varying vec4 fPosition;
+varying vec3 worldSpaceCoords;
+
+  vec4 sampleAs3DTexture(vec3 texCoord) {
+    if (texCoord.z >=  1.0 || texCoord.z <= 0.0)
+      return vec4(0.0, 0.0, 0.0, 1.0);
+    if (texCoord.x >=  1.0 || texCoord.x <= 0.0)
+      return vec4(0.0, 0.0, 0.0, 1.0);
+    if (texCoord.y >=  1.0 || texCoord.y <= 0.0)
+      return vec4(0.0, 0.0, 0.0, 1.0);
+
+    float v_slices = 16.0; //pass from view to shader
+    float h_slices = 16.0;
+
+    float n = v_slices * h_slices -1.0;
+ 
+    float zSliceNumber1 = floor(texCoord.z * n);
+    float zSliceNumber2 = min(zSliceNumber1+1.0, n);
+
+    float row1 = floor(zSliceNumber1/h_slices);
+    float row2 = floor(zSliceNumber2/h_slices);
+    float col1 = zSliceNumber1 - row1*h_slices;
+    float col2 = zSliceNumber2 - row2*h_slices;
+
+    float x1 = (col1+texCoord.x)/h_slices;
+    float x2 = (col2+texCoord.x)/h_slices;
+    float y1 = (row1+1.0-texCoord.y)/v_slices;
+    float y2 = (row2+1.0-texCoord.y)/v_slices;
+
+    vec2 texCoordSlice1 = vec2(x1, y1);
+    vec2 texCoordSlice2 = vec2(x2, y2);
+    
+    vec4 colorSlice1 = texture2D( cubeTex, texCoordSlice1 );
+    vec4 colorSlice2 = texture2D( cubeTex, texCoordSlice2 );
+
+    float zDifference = mod(texCoord.z * n, 1.0);
+
+    return mix(colorSlice1, colorSlice2, zDifference) ;
+  }
+
+void main() {
+  
+  vec2 backtexcoords = vec2(((fPosition.x / fPosition.w) + 1.0 ) / 2.0,
+                            ((fPosition.y / fPosition.w) + 1.0 ) / 2.0 );
+
+  vec3 back = texture2D(backTex, backtexcoords).xyz; //world pos of back, in range [0,1]^3
+  if (back.x == 0.0 && back.y == 0.0 && back.z ==0.0) { 
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
+  vec3 front = worldSpaceCoords; //world pos of front, in range [0,1]^3
+  
+  vec3 dir = back - front;
+  float rayLength = length(dir);
+
+  float delta = 1.0/float(steps);
+  vec3 r = normalize(dir) * delta;
+  vec3 curr = front;
+  vec4 accColor = vec4(0.0, 0.0, 0.0, 0.0);
+  float accAlpha = 0.0;
+  float accLength = 0.0;
+  vec4 colorSample;
+  float alphaSample;
+
+  for (int i=0; i<MAX_STEPS; i++) {
+    colorSample =  sampleAs3DTexture(curr);
+    alphaSample = colorSample.a;
+
+    alphaSample *= alphaCorrection;
+    
+    accColor += (1.0 - accAlpha) * colorSample * alphaSample;
+    accAlpha += alphaSample;
+
+    curr += r;
+    accLength += delta;
+
+    if (accLength >=rayLength || accAlpha >= 1.0 || i == (steps+1))
+      break;
+  }
+
+  if (accAlpha < 1.0)
+    accColor  = accAlpha * accColor;
+  gl_FragColor = vec4(accColor.xyz, 1.0);
+}
+</script>
+
+<!--  first render pass to get back face coordinates  -->
+<!--                vertex shader                     -->
+<script id="texture-vertex-shader" type="x-shader/x-vertex">
+attribute vec4 vPosition;
+
+uniform mat4 model2clip;
+uniform mat4 model2world;
+
+varying vec3 worldSpaceCoords;
+
+void main()
+{
+    worldSpaceCoords = (model2world * vPosition).xyz + vec3(0.5, 0.5, 0.5);
+    gl_Position = model2clip * vPosition;
+}
+</script>
+<!--                fragment shader                   -->
+<script id="texture-fragment-shader" type="x-shader/x-fragment">
+precision mediump float;
+
+varying vec3 worldSpaceCoords;
+
+void main() {
+  
+  vec3 color = worldSpaceCoords;
+  if (color.z == 0.0)
+    color.z = 1e-6; //we need to be able to distinguish between background and real back texture
+
+  gl_FragColor  = vec4( color, 1.0 );   
+}
+</script>
+
+<script type="text/javascript" src="Common/webgl-utils.js"></script>
+<script type="text/javascript" src="Common/initShaders.js"></script>
+<script type="text/javascript" src="Common/PVMat.js"></script>
+<script type="text/javascript" src="Common/Texture2D.js"></script>
+<script type="text/javascript" src="cube.js"></script>
+<script type="text/javascript" src="view.js"></script>
+
+<link rel="stylesheet" href="style.css">
+</head>
+
+<table style="width:100%">
+  <tr>
+  <th>
+    <p>
+    <canvas id="gl-canvas" width="800" height="600" style="background: black;">
+    Oops ... your browser doesn't support the HTML5 canvas element
+    </canvas>
+
+  </th>
+  <th>
+      <table style="width:400px">
+        <tr>
+          <th>
+          zoom
+          </th>
+          <th>
+            <div class="slidecontainer">
+            <input id="zoomslider" type="range" class="slider"
+                   min=".1" max="5" step=".1"  value="1" />
+            </div>
+          </th> 
+        </tr>
+
+        <tr>
+          <th>
+          alphaCorrection
+          </th>
+          <th>
+            <div class="slidecontainer">
+            <input id="alphaslider" type="range" class="slider"
+                   min="0.001" max="0.2" step="0.0005"/>
+            </div>
+          </th> 
+        </tr>
+
+        <tr>
+          <th>
+          steps
+          </th>
+          <th>
+            <div class="slidecontainer">
+            <input id="stepslider" type="range" class="slider"
+                   min="10" max="512" step="2" value="100"/>
+            </div>
+          </th> 
+        </tr>
+
+        <tr>
+          <th>
+          field of view
+          </th>
+          <th>
+            <div class="slidecontainer">
+            <input id="fovslider" type="range" class="slider"
+                   min="0" max="1.5" step=".1" value=".7"/>
+            </div>
+          </th> 
+        </tr>
+
+        <tr>
+          <th>
+          near
+          </th>
+          <th>
+            <div class="slidecontainer">
+            <input id="nearslider" type="range" class="slider"
+                   min=".1" max="10" step=".1" value=".1"/>
+            </div>
+          </th> 
+        </tr>
+
+        <tr>
+          <th>
+          voxel grid
+          </th>
+          <th>
+            <button id="teapot">Teapot</button>
+            <button id="bonsai">Bonsai</button>
+            <button id="foot">Foot</button>
+          </th> 
+        </tr> 
+
+        <tr>
+          <th>
+          view
+          </th>
+          <th>
+            <button id="frontview">Cube Front</button>
+            <button id="backview">Cube Back</button>
+            <button id="volumeview">Volume Rending</button>
+          </th> 
+        </tr> 
+      </table>
+  </th>
+  </tr>
+</table>
+
+
+
+<body bgcolor="#000000" text="#FFFFFF">
+
+
+
+
+</body>
+</html>
