@@ -115,35 +115,6 @@ window.onload = function init()
         render();
     };
 
-    document.getElementById("fovslider").value = fov;
-    document.getElementById("fovslider").oninput = function(event) {
-        fov = parseFloat(event.target.value);
-        setPerspective();
-        render();
-    };
-
-    document.getElementById("nearslider").value = near;
-    document.getElementById("nearslider").oninput = function(event) {
-        near = parseFloat(event.target.value);
-        setPerspective();
-        render();
-    };
-
-    document.getElementById("frontview").onclick = function () {
-        renderview = 2;
-        render();
-    };
-
-    document.getElementById("backview").onclick = function () {
-        renderview = 1;
-        render();
-    };
-
-    document.getElementById("volumeview").onclick = function () {
-        renderview = 3;
-        render();
-    };
-
     document.getElementById("teapot").onclick = function () {
         voxel_source = "teapot.raw.png";
         updateVoxelTexture();
