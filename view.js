@@ -4,9 +4,11 @@ var canvas;
 var cube;
 var model2clip, model2world;
 var fb, fb_texture;
-var voxel_im, voxel_tex;
 
-var voxel_source = "teapot.raw.png";
+var voxel_ims = [];
+var voxel_sources = ["teapot.raw.png", "bonsai.raw.png", "foot.raw.png"];
+var voxel_index = 0;
+var voxel_tex;
 
 var renderview = 3;
 var alphaCorrection = 0.08;
@@ -116,19 +118,19 @@ window.onload = function init()
     };
 
     document.getElementById("teapot").onclick = function () {
-        voxel_source = "teapot.raw.png";
+        voxel_index = 0;
         updateVoxelTexture();
         render();
     };
 
     document.getElementById("bonsai").onclick = function () {
-        voxel_source = "bonsai.raw.png";
+        voxel_index = 1;
         updateVoxelTexture();
         render();
     };
 
     document.getElementById("foot").onclick = function () {
-        voxel_source = "foot.raw.png";
+        voxel_index = 2;
         updateVoxelTexture();
         render();
     };
@@ -180,25 +182,25 @@ function initTextureBuffers() {
 }
 
 function loadVoxelTexture() {
-    voxel_im = new Image();
-    voxel_im.onload = function() {
+    var i;
+    for (i=0; i<voxel_sources.length; i++) {
+        voxel_ims[i] = new Image();
+        voxel_ims[i].src = voxel_sources[i];
+    }
+
+    voxel_ims[voxel_index].onload = function() {
         console.log("voxel_im loading...");
         voxel_tex = Texture2D.create(gl, Texture2D.Filtering.BILINEAR,Texture2D.Wrap.MIRRORED_REPEAT, 
-                                    voxel_im.width, voxel_im.height, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, voxel_im);
+                                   voxel_ims[voxel_index].width, voxel_ims[voxel_index].height, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, voxel_ims[voxel_index]);
         console.log("voxel_im loaded");
-
     };
-    voxel_im.src = voxel_source;
-    voxel_im.v_slices = 16;
-    voxel_im.h_slices = 16;
 }
 
 function updateVoxelTexture() {
-    voxel_im.src = voxel_source;
-    console.log("new voxel_im loading...");
+    console.log("voxel_im loading...");
     voxel_tex = Texture2D.create(gl, Texture2D.Filtering.BILINEAR,Texture2D.Wrap.MIRRORED_REPEAT, 
-                                voxel_im.width, voxel_im.height, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, voxel_im);
-    console.log("new voxel_im loaded");
+                                voxel_ims[voxel_index].width, voxel_ims[voxel_index].height, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, voxel_ims[voxel_index]);
+    console.log("voxel_im loaded");
 }
 
 function getArcBallVector(x, y) { //defines the sphere in view space, returns vectors in world space
